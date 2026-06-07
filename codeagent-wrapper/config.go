@@ -32,16 +32,17 @@ type ParallelConfig struct {
 
 // TaskSpec describes an individual task entry in the parallel config
 type TaskSpec struct {
-	ID           string          `json:"id"`
-	Task         string          `json:"task"`
-	WorkDir      string          `json:"workdir,omitempty"`
-	Dependencies []string        `json:"dependencies,omitempty"`
-	SessionID    string          `json:"session_id,omitempty"`
-	Backend      string          `json:"backend,omitempty"`
-	Progress     bool            `json:"-"`
-	Mode         string          `json:"-"`
-	UseStdin     bool            `json:"-"`
-	Context      context.Context `json:"-"`
+	ID              string          `json:"id"`
+	Task            string          `json:"task"`
+	WorkDir         string          `json:"workdir,omitempty"`
+	Dependencies    []string        `json:"dependencies,omitempty"`
+	SessionID       string          `json:"session_id,omitempty"`
+	Backend         string          `json:"backend,omitempty"`
+	Progress        bool            `json:"-"`
+	Mode            string          `json:"-"`
+	UseStdin        bool            `json:"-"`
+	SkipPermissions bool            `json:"-"`
+	Context         context.Context `json:"-"`
 }
 
 // TaskResult captures the execution outcome of a task

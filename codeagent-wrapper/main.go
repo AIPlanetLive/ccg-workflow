@@ -264,10 +264,16 @@ func run() (exitCode int) {
 			}
 
 			cfg.GlobalBackend = backendName
+			// Parallel mode is driven entirely from stdin + a small flag set; the
+			// skip-permissions toggle is sourced from the env (CLI extras are rejected
+			// above). Thread it onto every task so the backend arg builder emits
+			// --dangerously-skip-permissions, matching single-task behavior.
+			skipPermissions := envFlagEnabled("CODEAGENT_SKIP_PERMISSIONS")
 			for i := range cfg.Tasks {
 				if strings.TrimSpace(cfg.Tasks[i].Backend) == "" {
 					cfg.Tasks[i].Backend = backendName
 				}
+				cfg.Tasks[i].SkipPermissions = skipPermissions
 				// Inject ROLE_FILE content if present
 				injectedTask, err := injectRoleFile(cfg.Tasks[i].Task)
 				if err != nil {
@@ -469,12 +475,13 @@ func run() (exitCode int) {
 	logInfo(fmt.Sprintf("%s running...", cfg.Backend))
 
 	taskSpec := TaskSpec{
-		Task:      taskText,
-		WorkDir:   cfg.WorkDir,
-		Mode:      cfg.Mode,
-		SessionID: cfg.SessionID,
-		UseStdin:  useStdin,
-		Progress:  cfg.Progress,
+		Task:            taskText,
+		WorkDir:         cfg.WorkDir,
+		Mode:            cfg.Mode,
+		SessionID:       cfg.SessionID,
+		UseStdin:        useStdin,
+		Progress:        cfg.Progress,
+		SkipPermissions: cfg.SkipPermissions,
 	}
 
 	result := runTaskFn(taskSpec, false, cfg.Timeout)

@@ -820,12 +820,13 @@ func runCodexTaskWithContext(parentCtx context.Context, taskSpec TaskSpec, backe
 	logger := injectedLogger
 
 	cfg := &Config{
-		Mode:      taskSpec.Mode,
-		Task:      taskSpec.Task,
-		SessionID: taskSpec.SessionID,
-		WorkDir:   taskSpec.WorkDir,
-		Backend:   defaultBackendName,
-		Progress:  taskSpec.Progress,
+		Mode:            taskSpec.Mode,
+		Task:            taskSpec.Task,
+		SessionID:       taskSpec.SessionID,
+		WorkDir:         taskSpec.WorkDir,
+		Backend:         defaultBackendName,
+		Progress:        taskSpec.Progress,
+		SkipPermissions: taskSpec.SkipPermissions,
 	}
 
 	commandName := codexCommand
