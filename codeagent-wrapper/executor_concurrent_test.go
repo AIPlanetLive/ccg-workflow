@@ -603,6 +603,58 @@ func TestExecutorRunCodexTaskWithContext(t *testing.T) {
 		}
 	})
 
+	t.Run("claudeResumeSetsWorkDir", func(t *testing.T) {
+		t.Setenv("CODEAGENT_ADD_DIRS", filepath.Join(t.TempDir(), "missing"))
+
+		workDir := t.TempDir()
+		var rc *execFakeRunner
+		var command string
+		newCommandRunner = func(ctx context.Context, name string, args ...string) commandRunner {
+			command = name
+			rc = &execFakeRunner{
+				stdout:  newReasonReadCloser(`{"type":"item.completed","item":{"type":"agent_message","text":"claude resume"}}`),
+				process: &execFakeProcess{pid: 15},
+			}
+			return rc
+		}
+
+		res := runCodexTaskWithContext(context.Background(), TaskSpec{ID: "task-claude-resume", Task: "payload", WorkDir: workDir, Mode: "resume", SessionID: "sid-claude"}, ClaudeBackend{}, nil, false, false, 1)
+		if res.ExitCode != 0 || res.Message != "claude resume" {
+			t.Fatalf("unexpected result: %+v", res)
+		}
+		if command != "claude" {
+			t.Fatalf("expected claude command, got %q", command)
+		}
+		if rc == nil || rc.dir != workDir {
+			t.Fatalf("expected claude resume to set cmd.Dir=%q, got runner=%v dir=%q", workDir, rc, rc.dir)
+		}
+	})
+
+	t.Run("codexResumeSkipsCmdDir", func(t *testing.T) {
+		workDir := t.TempDir()
+		var rc *execFakeRunner
+		var command string
+		newCommandRunner = func(ctx context.Context, name string, args ...string) commandRunner {
+			command = name
+			rc = &execFakeRunner{
+				stdout:  newReasonReadCloser(`{"type":"item.completed","item":{"type":"agent_message","text":"codex resume"}}`),
+				process: &execFakeProcess{pid: 16},
+			}
+			return rc
+		}
+
+		res := runCodexTaskWithContext(context.Background(), TaskSpec{ID: "task-codex-resume", Task: "payload", WorkDir: workDir, Mode: "resume", SessionID: "sid-codex"}, nil, nil, false, false, 1)
+		if res.ExitCode != 0 || res.Message != "codex resume" {
+			t.Fatalf("unexpected result: %+v", res)
+		}
+		if command != "codex" {
+			t.Fatalf("expected codex command, got %q", command)
+		}
+		if rc == nil || rc.dir != "" {
+			t.Fatalf("expected codex resume to leave cmd.Dir unset, got runner=%v dir=%q", rc, rc.dir)
+		}
+	})
+
 	t.Run("missingMessage", func(t *testing.T) {
 		newCommandRunner = func(ctx context.Context, name string, args ...string) commandRunner {
 			return &execFakeRunner{

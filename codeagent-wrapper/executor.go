@@ -1025,18 +1025,16 @@ func runCodexTaskWithContext(parentCtx context.Context, taskSpec TaskSpec, backe
 	}
 	cmd.SetEnv(env) // SetEnv 会自动合并 os.Environ() (executor.go:122-161)
 
-	// Set working directory for backends that don't support -C flag.
-	// - Codex: passes workdir via -C flag, skip cmd.Dir to avoid conflicts.
-	// - Gemini: use workDir as CWD. Previously used $HOME to avoid project .env
-	//   overriding global API keys (see github.com/google-gemini/gemini-cli/issues/2493),
-	//   but $HOME causes Gemini CLI to hang on long prompts due to directory scanning.
-	//   API keys are already protected via cmd.SetEnv() from loadMinimalEnvSettings().
-	//   Project dir is also passed via --include-directories in buildGeminiArgs().
-	// - Claude: uses cmd.Dir as project context (no .env loading issue).
-	if cfg.Mode != "resume" && cfg.WorkDir != "" {
+	// Set working directory for backends that rely on cwd.
+	// - Codex: uses -C for new mode and session-id for resume; skip cmd.Dir.
+	// - Gemini: uses cmd.Dir as cwd in both new and resume modes. New mode
+	//   also passes --include-directories in buildGeminiArgs().
+	// - Claude: resolves sessions by cwd-derived project plus id, so resume
+	//   must set cmd.Dir just like new mode.
+	if cfg.WorkDir != "" {
 		switch commandName {
 		case "codex":
-			// Codex uses -C flag, don't set cmd.Dir
+			// Codex uses -C (new) / session-id (resume); never needs cmd.Dir.
 		default:
 			cmd.SetDir(cfg.WorkDir)
 		}

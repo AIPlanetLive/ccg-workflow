@@ -83,8 +83,10 @@ func (ws *WebServer) Start() error {
 		}
 	}()
 
-	// Auto-open browser
-	go openBrowser(url)
+	// Auto-open browser (default on; CODEAGENT_OPEN_BROWSER=false disables)
+	if browserAutoOpenEnabled() {
+		go openBrowser(url)
+	}
 
 	return nil
 }
@@ -110,6 +112,13 @@ func (ws *WebServer) Stop() error {
 	ws.mu.Unlock()
 
 	return ws.server.Shutdown(ctx)
+}
+
+// browserAutoOpenEnabled reports whether the Web UI should auto-open a browser
+// tab. Default on; set CODEAGENT_OPEN_BROWSER=false to disable (e.g. for
+// supervisor-spawned tasks that would otherwise flood the browser with tabs).
+func browserAutoOpenEnabled() bool {
+	return parseBoolFlag(os.Getenv("CODEAGENT_OPEN_BROWSER"), true)
 }
 
 // openBrowser opens the specified URL in the default browser

@@ -586,6 +586,7 @@ Environment Variables:
     CODEX_DISABLE_SKIP_GIT_CHECK  Disable skip-git-repo-check flag (default: false)
     CODEAGENT_ASCII_MODE       Use ASCII symbols instead of Unicode (PASS/WARN/FAIL)
     CODEAGENT_LITE_MODE        Enable lite mode (true/false)
+    CODEAGENT_OPEN_BROWSER     Auto-open Web UI tab in browser (default: true)
 
 Exit Codes:
     0    Success
