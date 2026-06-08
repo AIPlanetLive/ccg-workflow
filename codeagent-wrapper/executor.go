@@ -203,6 +203,46 @@ type parseResult struct {
 	threadID string
 }
 
+type stdoutActivityReader struct {
+	reader     io.Reader
+	onActivity func()
+}
+
+func (r *stdoutActivityReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	if n > 0 && r.onActivity != nil {
+		r.onActivity()
+	}
+	return n, err
+}
+
+type inactivityTimeoutError struct {
+	commandName string
+	seconds     int
+}
+
+func (e inactivityTimeoutError) Error() string {
+	commandName := e.commandName
+	if commandName == "" {
+		commandName = codexCommand
+	}
+	if commandName == "" {
+		commandName = defaultCodexCommand
+	}
+	return fmt.Sprintf("%s inactivity timeout: no output for %ds", commandName, e.seconds)
+}
+
+func inactivityTimeoutFromContext(ctx context.Context) (inactivityTimeoutError, bool) {
+	if ctx == nil {
+		return inactivityTimeoutError{}, false
+	}
+	var err inactivityTimeoutError
+	if errors.As(context.Cause(ctx), &err) {
+		return err, true
+	}
+	return inactivityTimeoutError{}, false
+}
+
 type taskLoggerContextKey struct{}
 
 func withTaskLogger(ctx context.Context, logger *Logger) context.Context {
@@ -964,8 +1004,10 @@ func runCodexTaskWithContext(parentCtx context.Context, taskSpec TaskSpec, backe
 	}
 
 	ctx := parentCtx
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
-	defer cancel()
+	ctx, cancelTimeout := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
+	defer cancelTimeout()
+	ctx, cancelInactivity := context.WithCancelCause(ctx)
+	defer cancelInactivity(nil)
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -1038,9 +1080,19 @@ func runCodexTaskWithContext(parentCtx context.Context, taskSpec TaskSpec, backe
 		return result
 	}
 
-	stdoutReader := io.Reader(stdout)
+	stdoutActivityCh := make(chan struct{}, 1)
+	var lastStdoutActivity atomic.Int64
+	markStdoutActivity := func() {
+		lastStdoutActivity.Store(time.Now().UnixNano())
+		select {
+		case stdoutActivityCh <- struct{}{}:
+		default:
+		}
+	}
+
+	stdoutReader := io.Reader(&stdoutActivityReader{reader: stdout, onActivity: markStdoutActivity})
 	if stdoutLogger != nil {
-		stdoutReader = io.TeeReader(stdout, stdoutLogger)
+		stdoutReader = io.TeeReader(stdoutReader, stdoutLogger)
 	}
 
 	// Start parse goroutine BEFORE starting the command to avoid race condition
@@ -1109,6 +1161,21 @@ func runCodexTaskWithContext(parentCtx context.Context, taskSpec TaskSpec, backe
 	logInfoFn(fmt.Sprintf("Starting %s with args: %s %s...", commandName, commandName, strings.Join(codexArgs[:min(5, len(codexArgs))], " ")))
 
 	if err := cmd.Start(); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			if inactivityErr, ok := inactivityTimeoutFromContext(ctx); ok {
+				result.ExitCode = 124
+				result.Error = attachStderr(inactivityErr.Error())
+				return result
+			}
+			if errors.Is(ctxErr, context.DeadlineExceeded) {
+				result.ExitCode = 124
+				result.Error = attachStderr(fmt.Sprintf("%s execution timeout", commandName))
+				return result
+			}
+			result.ExitCode = 130
+			result.Error = attachStderr("execution cancelled")
+			return result
+		}
 		if strings.Contains(err.Error(), "executable file not found") {
 			msg := fmt.Sprintf("%s command not found in PATH", commandName)
 			logErrorFn(msg)
@@ -1126,6 +1193,7 @@ func runCodexTaskWithContext(parentCtx context.Context, taskSpec TaskSpec, backe
 	if logger != nil {
 		logInfoFn(fmt.Sprintf("Log capturing to: %s", logger.Path()))
 	}
+	lastStdoutActivity.Store(time.Now().UnixNano())
 
 	if useStdin && stdinPipe != nil {
 		logInfoFn(fmt.Sprintf("Writing %d chars to stdin...", len(taskSpec.Task)))
@@ -1138,6 +1206,8 @@ func runCodexTaskWithContext(parentCtx context.Context, taskSpec TaskSpec, backe
 
 	waitCh := make(chan error, 1)
 	go func() { waitCh <- cmd.Wait() }()
+
+	inactivityTimeoutSec := resolveInactivityTimeout()
 
 	var (
 		waitErr              error
@@ -1153,13 +1223,48 @@ func runCodexTaskWithContext(parentCtx context.Context, taskSpec TaskSpec, backe
 		// This handles Windows edge case where child processes hold stdout handles
 		fallbackExitTimer   *time.Timer
 		fallbackExitTimerCh <-chan time.Time
+		inactivityTimer     *time.Timer
+		inactivityTimerCh   <-chan time.Time
+		inactivityDuration  time.Duration
 	)
+
+	if inactivityTimeoutSec > 0 {
+		inactivityDuration = time.Duration(inactivityTimeoutSec) * time.Second
+		inactivityTimer = time.NewTimer(inactivityDuration)
+		inactivityTimerCh = inactivityTimer.C
+	}
+
+	resetInactivityTimer := func(delay time.Duration) {
+		if inactivityTimer == nil {
+			return
+		}
+		if delay < 0 {
+			delay = 0
+		}
+		if !inactivityTimer.Stop() {
+			select {
+			case <-inactivityTimer.C:
+			default:
+			}
+		}
+		inactivityTimer.Reset(delay)
+	}
 
 waitLoop:
 	for {
 		select {
 		case waitErr = <-waitCh:
 			break waitLoop
+		case <-stdoutActivityCh:
+			resetInactivityTimer(inactivityDuration)
+		case <-inactivityTimerCh:
+			lastActivity := time.Unix(0, lastStdoutActivity.Load())
+			silence := time.Since(lastActivity)
+			if silence < inactivityDuration {
+				resetInactivityTimer(inactivityDuration - silence)
+				continue
+			}
+			cancelInactivity(inactivityTimeoutError{commandName: commandName, seconds: inactivityTimeoutSec})
 		case <-ctx.Done():
 			ctxCancelled = true
 			logErrorFn(cancelReason(commandName, ctx))
@@ -1222,6 +1327,14 @@ waitLoop:
 			}
 		}
 	}
+	if inactivityTimer != nil {
+		if !inactivityTimer.Stop() {
+			select {
+			case <-inactivityTimer.C:
+			default:
+			}
+		}
+	}
 
 	if messageTimer != nil {
 		if !messageTimer.Stop() {
@@ -1266,6 +1379,11 @@ waitLoop:
 	}
 
 	if ctxErr := ctx.Err(); ctxErr != nil {
+		if inactivityErr, ok := inactivityTimeoutFromContext(ctx); ok {
+			result.ExitCode = 124
+			result.Error = attachStderr(inactivityErr.Error())
+			return result
+		}
 		if errors.Is(ctxErr, context.DeadlineExceeded) {
 			result.ExitCode = 124
 			result.Error = attachStderr(fmt.Sprintf("%s execution timeout", commandName))
@@ -1365,6 +1483,10 @@ func cancelReason(commandName string, ctx context.Context) string {
 
 	if commandName == "" {
 		commandName = codexCommand
+	}
+
+	if inactivityErr, ok := inactivityTimeoutFromContext(ctx); ok {
+		return inactivityErr.Error()
 	}
 
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {

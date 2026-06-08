@@ -14,15 +14,16 @@ import (
 )
 
 const (
-	version               = "5.9.0"
-	defaultWorkdir        = "."
-	defaultTimeout        = 7200 // seconds (2 hours)
-	defaultCoverageTarget = 90.0
-	codexLogLineLimit     = 0 // 0 = unlimited (prevent truncation of long JSON events like agent_message)
-	stdinSpecialChars     = "\n\\\"'`$"
-	stderrCaptureLimit    = 4 * 1024
-	defaultBackendName    = "codex"
-	defaultCodexCommand   = "codex"
+	version                  = "5.9.0"
+	defaultWorkdir           = "."
+	defaultTimeout           = 21600 // seconds (6 hours)
+	defaultInactivityTimeout = 1800  // seconds (30 minutes)
+	defaultCoverageTarget    = 90.0
+	codexLogLineLimit        = 0 // 0 = unlimited (prevent truncation of long JSON events like agent_message)
+	stdinSpecialChars        = "\n\\\"'`$"
+	stderrCaptureLimit       = 4 * 1024
+	defaultBackendName       = "codex"
+	defaultCodexCommand      = "codex"
 
 	// stdout close reasons
 	stdoutCloseReasonWait  = "wait-done"
@@ -579,7 +580,8 @@ Options:
     --progress            Emit compact progress lines to stderr during execution
 
 Environment Variables:
-    CODEX_TIMEOUT              Timeout in milliseconds (default: 7200000)
+    CODEX_TIMEOUT              Timeout in milliseconds (default: 21600000)
+    CODEX_INACTIVITY_TIMEOUT   Stdout inactivity timeout in milliseconds (default: 1800000, 0 disables)
     CODEX_REQUIRE_APPROVAL     Require manual approval for file operations (default: false)
     CODEX_DISABLE_SKIP_GIT_CHECK  Disable skip-git-repo-check flag (default: false)
     CODEAGENT_ASCII_MODE       Use ASCII symbols instead of Unicode (PASS/WARN/FAIL)

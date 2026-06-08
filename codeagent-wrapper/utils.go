@@ -29,6 +29,27 @@ func resolveTimeout() int {
 	return parsed
 }
 
+func resolveInactivityTimeout() int {
+	raw := os.Getenv("CODEX_INACTIVITY_TIMEOUT")
+	if raw == "" {
+		return defaultInactivityTimeout
+	}
+
+	parsed, err := strconv.Atoi(raw)
+	if err != nil || parsed < 0 {
+		logWarn(fmt.Sprintf("Invalid CODEX_INACTIVITY_TIMEOUT '%s', falling back to %ds", raw, defaultInactivityTimeout))
+		return defaultInactivityTimeout
+	}
+
+	if parsed == 0 {
+		return 0
+	}
+	if parsed > 10000 {
+		return parsed / 1000
+	}
+	return parsed
+}
+
 func readPipedTask() (string, error) {
 	if isTerminal() {
 		logInfo("Stdin is tty, skipping pipe read")

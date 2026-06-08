@@ -904,6 +904,7 @@ func TestRunCodexTask_ForcesStopAfterCompletion(t *testing.T) {
 		t.Skip("skipping timing-sensitive integration test in short mode")
 	}
 	defer resetTestHooks()
+	t.Setenv("CODEAGENT_POST_MESSAGE_DELAY", "1")
 	forceKillDelay.Store(0)
 
 	fake := newFakeCmd(fakeCmdConfig{
@@ -943,6 +944,7 @@ func TestRunCodexTask_DoesNotTerminateBeforeThreadCompleted(t *testing.T) {
 		t.Skip("skipping timing-sensitive integration test in short mode")
 	}
 	defer resetTestHooks()
+	t.Setenv("CODEAGENT_POST_MESSAGE_DELAY", "1")
 	forceKillDelay.Store(0)
 
 	fake := newFakeCmd(fakeCmdConfig{
@@ -976,6 +978,68 @@ func TestRunCodexTask_DoesNotTerminateBeforeThreadCompleted(t *testing.T) {
 	if fake.process.SignalCount() == 0 {
 		t.Fatalf("expected SIGTERM to be sent, got %d", fake.process.SignalCount())
 	}
+}
+
+func TestRunCodexTaskInactivityWatchdog(t *testing.T) {
+	defer resetTestHooks()
+	t.Setenv("CODEX_INACTIVITY_TIMEOUT", "1")
+	forceKillDelay.Store(0)
+	buildCodexArgsFn = func(cfg *Config, targetArg string) []string {
+		return []string{targetArg}
+	}
+	codexCommand = "codex"
+
+	runWithStdout := func(t *testing.T, stdoutPlan []fakeStdoutEvent) (TaskResult, time.Duration, *fakeCmd) {
+		t.Helper()
+
+		fake := newFakeCmd(fakeCmdConfig{
+			StdoutPlan:          stdoutPlan,
+			KeepStdoutOpen:      true,
+			BlockWait:           true,
+			ReleaseWaitOnSignal: true,
+		})
+		newCommandRunner = func(ctx context.Context, name string, args ...string) commandRunner {
+			return fake
+		}
+
+		start := time.Now()
+		res := runCodexTask(TaskSpec{Task: "ignored"}, false, 4)
+		elapsed := time.Since(start)
+		if res.LogPath != "" {
+			_ = os.Remove(res.LogPath)
+		}
+		return res, elapsed, fake
+	}
+
+	t.Run("firesAfterSilence", func(t *testing.T) {
+		res, elapsed, fake := runWithStdout(t, []fakeStdoutEvent{
+			{Data: `{"type":"thread.started","thread_id":"idle-thread"}` + "\n"},
+		})
+
+		if res.ExitCode != 124 || !strings.Contains(res.Error, "codex inactivity timeout: no output for 1s") {
+			t.Fatalf("expected inactivity timeout, got result=%+v elapsed=%v", res, elapsed)
+		}
+		if elapsed < 900*time.Millisecond || elapsed > 2500*time.Millisecond {
+			t.Fatalf("watchdog fired outside expected window: %v", elapsed)
+		}
+		if fake.process.SignalCount() == 0 {
+			t.Fatalf("expected watchdog to terminate process")
+		}
+	})
+
+	t.Run("outputResetsTimer", func(t *testing.T) {
+		res, elapsed, _ := runWithStdout(t, []fakeStdoutEvent{
+			{Data: `{"type":"thread.started","thread_id":"reset-thread"}` + "\n"},
+			{Delay: 600 * time.Millisecond, Data: `{"type":"turn.started"}` + "\n"},
+		})
+
+		if res.ExitCode != 124 || !strings.Contains(res.Error, "codex inactivity timeout: no output for 1s") {
+			t.Fatalf("expected inactivity timeout after reset, got result=%+v elapsed=%v", res, elapsed)
+		}
+		if elapsed < 1300*time.Millisecond || elapsed > 3200*time.Millisecond {
+			t.Fatalf("stdout activity did not reset watchdog timer, elapsed=%v", elapsed)
+		}
+	})
 }
 
 func TestBackendParseArgs_NewMode(t *testing.T) {
@@ -1650,12 +1714,12 @@ func TestRunResolveTimeout(t *testing.T) {
 		envVal string
 		want   int
 	}{
-		{"empty env", "", 7200},
+		{"empty env", "", defaultTimeout},
 		{"milliseconds", "7200000", 7200},
 		{"seconds", "3600", 3600},
-		{"invalid", "invalid", 7200},
-		{"negative", "-100", 7200},
-		{"zero", "0", 7200},
+		{"invalid", "invalid", defaultTimeout},
+		{"negative", "-100", defaultTimeout},
+		{"zero", "0", defaultTimeout},
 		{"small milliseconds", "5000", 5000},
 		{"boundary", "10000", 10000},
 		{"above boundary", "10001", 10},
@@ -1668,6 +1732,34 @@ func TestRunResolveTimeout(t *testing.T) {
 			got := resolveTimeout()
 			if got != tt.want {
 				t.Errorf("resolveTimeout() with env=%q = %v, want %v", tt.envVal, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRunResolveInactivityTimeout(t *testing.T) {
+	tests := []struct {
+		name   string
+		envVal string
+		want   int
+	}{
+		{"empty env", "", defaultInactivityTimeout},
+		{"milliseconds", "1800000", 1800},
+		{"seconds", "120", 120},
+		{"disabled", "0", 0},
+		{"invalid", "invalid", defaultInactivityTimeout},
+		{"negative", "-100", defaultInactivityTimeout},
+		{"boundary", "10000", 10000},
+		{"above boundary", "10001", 10},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			os.Setenv("CODEX_INACTIVITY_TIMEOUT", tt.envVal)
+			defer os.Unsetenv("CODEX_INACTIVITY_TIMEOUT")
+			got := resolveInactivityTimeout()
+			if got != tt.want {
+				t.Errorf("resolveInactivityTimeout() with env=%q = %v, want %v", tt.envVal, got, tt.want)
 			}
 		})
 	}
