@@ -11,16 +11,20 @@ import (
 func TestClaudeBuildArgs_ModesAndPermissions(t *testing.T) {
 	backend := ClaudeBackend{}
 
-	t.Run("new mode omits skip-permissions by default", func(t *testing.T) {
+	t.Run("new mode includes skip-permissions by default", func(t *testing.T) {
+		t.Setenv("CLAUDE_REQUIRE_APPROVAL", "")
+
 		cfg := &Config{Mode: "new", WorkDir: "/repo"}
 		got := backend.BuildArgs(cfg, "todo")
-		want := []string{"-p", "--setting-sources", "", "--output-format", "stream-json", "--verbose", "todo"}
+		want := []string{"-p", "--dangerously-skip-permissions", "--setting-sources", "", "--output-format", "stream-json", "--verbose", "todo"}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("got %v, want %v", got, want)
 		}
 	})
 
 	t.Run("new mode can opt-in skip-permissions", func(t *testing.T) {
+		t.Setenv("CLAUDE_REQUIRE_APPROVAL", "")
+
 		cfg := &Config{Mode: "new", SkipPermissions: true}
 		got := backend.BuildArgs(cfg, "-")
 		want := []string{"-p", "--dangerously-skip-permissions", "--setting-sources", "", "--output-format", "stream-json", "--verbose", "-"}
@@ -30,27 +34,55 @@ func TestClaudeBuildArgs_ModesAndPermissions(t *testing.T) {
 	})
 
 	t.Run("resume mode includes session id", func(t *testing.T) {
+		t.Setenv("CLAUDE_REQUIRE_APPROVAL", "")
+
 		cfg := &Config{Mode: "resume", SessionID: "sid-123", WorkDir: "/ignored"}
 		got := backend.BuildArgs(cfg, "resume-task")
-		want := []string{"-p", "--setting-sources", "", "-r", "sid-123", "--output-format", "stream-json", "--verbose", "resume-task"}
+		want := []string{"-p", "--dangerously-skip-permissions", "--setting-sources", "", "-r", "sid-123", "--output-format", "stream-json", "--verbose", "resume-task"}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("got %v, want %v", got, want)
 		}
 	})
 
 	t.Run("resume mode without session still returns base flags", func(t *testing.T) {
+		t.Setenv("CLAUDE_REQUIRE_APPROVAL", "")
+
 		cfg := &Config{Mode: "resume", WorkDir: "/ignored"}
 		got := backend.BuildArgs(cfg, "follow-up")
-		want := []string{"-p", "--setting-sources", "", "--output-format", "stream-json", "--verbose", "follow-up"}
+		want := []string{"-p", "--dangerously-skip-permissions", "--setting-sources", "", "--output-format", "stream-json", "--verbose", "follow-up"}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("got %v, want %v", got, want)
 		}
 	})
 
-	t.Run("resume mode can opt-in skip permissions", func(t *testing.T) {
+	t.Run("resume mode can opt-in skip permissions when approval required", func(t *testing.T) {
+		t.Setenv("CLAUDE_REQUIRE_APPROVAL", "true")
+
 		cfg := &Config{Mode: "resume", SessionID: "sid-123", SkipPermissions: true}
 		got := backend.BuildArgs(cfg, "resume-task")
 		want := []string{"-p", "--dangerously-skip-permissions", "--setting-sources", "", "-r", "sid-123", "--output-format", "stream-json", "--verbose", "resume-task"}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	})
+
+	t.Run("require approval true suppresses default skip permissions", func(t *testing.T) {
+		t.Setenv("CLAUDE_REQUIRE_APPROVAL", "true")
+
+		cfg := &Config{Mode: "new", WorkDir: "/repo"}
+		got := backend.BuildArgs(cfg, "todo")
+		want := []string{"-p", "--setting-sources", "", "--output-format", "stream-json", "--verbose", "todo"}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	})
+
+	t.Run("require approval one suppresses default skip permissions", func(t *testing.T) {
+		t.Setenv("CLAUDE_REQUIRE_APPROVAL", "1")
+
+		cfg := &Config{Mode: "new", WorkDir: "/repo"}
+		got := backend.BuildArgs(cfg, "todo")
+		want := []string{"-p", "--setting-sources", "", "--output-format", "stream-json", "--verbose", "todo"}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("got %v, want %v", got, want)
 		}

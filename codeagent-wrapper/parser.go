@@ -79,9 +79,10 @@ type UnifiedEvent struct {
 	Item     json.RawMessage `json:"item,omitempty"` // Lazy parse
 
 	// Claude-specific fields
-	Subtype   string `json:"subtype,omitempty"`
-	SessionID string `json:"session_id,omitempty"`
-	Result    string `json:"result,omitempty"`
+	Subtype   string          `json:"subtype,omitempty"`
+	SessionID string          `json:"session_id,omitempty"`
+	Result    string          `json:"result,omitempty"`
+	Message   json.RawMessage `json:"message,omitempty"` // Lazy parse
 
 	// Gemini-specific fields
 	// Gemini CLI uses camelCase "sessionId" instead of snake_case "session_id"
@@ -105,6 +106,19 @@ func (e *UnifiedEvent) GetSessionID() string {
 type ItemContent struct {
 	Type string      `json:"type"`
 	Text interface{} `json:"text"`
+}
+
+type claudeMessage struct {
+	Content []claudeContentBlock `json:"content"`
+}
+
+type claudeContentBlock struct {
+	Type     string          `json:"type"`
+	Text     string          `json:"text,omitempty"`
+	Thinking string          `json:"thinking,omitempty"`
+	Name     string          `json:"name,omitempty"`
+	Input    json.RawMessage `json:"input,omitempty"`
+	Content  json.RawMessage `json:"content,omitempty"`
 }
 
 func parseJSONStreamInternal(r io.Reader, warnFn func(string), infoFn func(string), onMessage func(), onComplete func()) (message, threadID string) {
@@ -203,11 +217,14 @@ func parseJSONStreamInternalWithContent(r io.Reader, warnFn func(string), infoFn
 				isCodex = true
 			}
 		}
-		isClaude := event.Subtype != "" || event.Result != ""
+		isGeminiTopLevel := event.Role != "" || event.Delta != nil || event.Status != ""
+		isClaudeStreaming := !isCodex && len(event.Message) > 0 && !isGeminiTopLevel &&
+			(event.Type == "assistant" || event.Type == "user" || event.Type == "system")
+		isClaude := event.Subtype != "" || event.Result != "" || isClaudeStreaming
 		if !isClaude && event.Type == "result" && event.GetSessionID() != "" && event.Status == "" {
 			isClaude = true
 		}
-		isGemini := event.Role != "" || event.Delta != nil || event.Status != "" ||
+		isGemini := isGeminiTopLevel ||
 			(event.Type == "init" && event.GetSessionID() != "")
 
 		// Handle Codex events
@@ -326,6 +343,10 @@ func parseJSONStreamInternalWithContent(r io.Reader, warnFn func(string), infoFn
 
 			infoFn(fmt.Sprintf("Parsed Claude event #%d type=%s subtype=%s result_len=%d", totalEvents, event.Type, event.Subtype, len(event.Result)))
 
+			if len(event.Message) > 0 {
+				handleClaudeStreamingMessage(event, warnFn, emitProgress, onContent)
+			}
+
 			if event.Result != "" {
 				claudeMessage = event.Result
 				notifyMessage()
@@ -387,6 +408,104 @@ func parseJSONStreamInternalWithContent(r io.Reader, warnFn func(string), infoFn
 
 	infoFn(fmt.Sprintf("parseJSONStream completed: events=%d, message_len=%d, thread_id_found=%t", totalEvents, len(message), threadID != ""))
 	return message, threadID
+}
+
+func handleClaudeStreamingMessage(event UnifiedEvent, warnFn func(string), emitProgress func(string), onContent func(content, contentType string)) {
+	if event.Type == "system" {
+		return
+	}
+
+	var message claudeMessage
+	if err := json.Unmarshal(event.Message, &message); err != nil {
+		warnFn(fmt.Sprintf("Failed to parse Claude message: %s", err.Error()))
+		return
+	}
+
+	switch event.Type {
+	case "assistant":
+		for _, block := range message.Content {
+			switch block.Type {
+			case "text":
+				if strings.TrimSpace(block.Text) == "" {
+					continue
+				}
+				emitProgress(formatProgressLine("message", map[string]string{"text": strconv.Quote(safeProgressSnippet(block.Text, 120))}))
+				if onContent != nil {
+					onContent(block.Text, "message")
+				}
+			case "thinking":
+				if strings.TrimSpace(block.Thinking) == "" {
+					continue
+				}
+				emitProgress(formatProgressLine("reasoning", map[string]string{"text": strconv.Quote(safeProgressSnippet(block.Thinking, 120))}))
+				if onContent != nil {
+					onContent(block.Thinking, "reasoning")
+				}
+			case "tool_use":
+				compactInput := compactJSON(block.Input)
+				cmd := strings.TrimSpace(strings.TrimSpace(block.Name) + " " + compactInput)
+				if cmd == "" {
+					continue
+				}
+				emitProgress(formatProgressLine("tool_use", map[string]string{"cmd": strconv.Quote(safeProgressSnippet(cmd, 120))}))
+				if onContent != nil {
+					onContent("$ "+cmd, "command")
+				}
+			}
+		}
+	case "user":
+		for _, block := range message.Content {
+			if block.Type != "tool_result" {
+				continue
+			}
+			resultText := claudeToolResultText(block.Content)
+			if strings.TrimSpace(resultText) == "" {
+				continue
+			}
+			emitProgress(formatProgressLine("tool_result", map[string]string{"text": strconv.Quote(safeProgressSnippet(resultText, 120))}))
+			if onContent != nil {
+				onContent(resultText, "message")
+			}
+		}
+	}
+}
+
+func compactJSON(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var buf bytes.Buffer
+	if err := json.Compact(&buf, raw); err == nil {
+		return buf.String()
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+func claudeToolResultText(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		return text
+	}
+
+	var blocks []claudeContentBlock
+	if err := json.Unmarshal(raw, &blocks); err == nil {
+		var sb strings.Builder
+		for _, block := range blocks {
+			switch block.Type {
+			case "text":
+				sb.WriteString(block.Text)
+			case "thinking":
+				sb.WriteString(block.Thinking)
+			}
+		}
+		return sb.String()
+	}
+
+	return ""
 }
 
 func formatProgressLine(event string, fields map[string]string) string {

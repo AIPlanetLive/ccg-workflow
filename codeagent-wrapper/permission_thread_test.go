@@ -48,7 +48,17 @@ func TestSkipPermissionsThreadedToExecArgs(t *testing.T) {
 		t.Fatalf("SkipPermissions=true must thread --dangerously-skip-permissions into exec args, got %v", withSkip)
 	}
 
-	if withoutSkip := run(false); hasFlag(withoutSkip) {
-		t.Fatalf("SkipPermissions=false must NOT include --dangerously-skip-permissions, got %v", withoutSkip)
+	t.Setenv("CLAUDE_REQUIRE_APPROVAL", "")
+	if withoutSkip := run(false); !hasFlag(withoutSkip) {
+		t.Fatalf("CLAUDE_REQUIRE_APPROVAL unset must default --dangerously-skip-permissions into exec args, got %v", withoutSkip)
+	}
+
+	t.Setenv("CLAUDE_REQUIRE_APPROVAL", "true")
+	if requireApproval := run(false); hasFlag(requireApproval) {
+		t.Fatalf("CLAUDE_REQUIRE_APPROVAL=true must suppress default --dangerously-skip-permissions, got %v", requireApproval)
+	}
+
+	if explicitSkip := run(true); !hasFlag(explicitSkip) {
+		t.Fatalf("SkipPermissions=true must force --dangerously-skip-permissions even when CLAUDE_REQUIRE_APPROVAL=true, got %v", explicitSkip)
 	}
 }

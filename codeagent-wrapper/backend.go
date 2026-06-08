@@ -86,7 +86,7 @@ func buildClaudeArgs(cfg *Config, targetArg string) []string {
 		return nil
 	}
 	args := []string{"-p"}
-	if cfg.SkipPermissions {
+	if cfg.SkipPermissions || !envFlagEnabled("CLAUDE_REQUIRE_APPROVAL") {
 		args = append(args, "--dangerously-skip-permissions")
 	}
 

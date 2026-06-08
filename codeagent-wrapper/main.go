@@ -583,6 +583,7 @@ Environment Variables:
     CODEX_TIMEOUT              Timeout in milliseconds (default: 21600000)
     CODEX_INACTIVITY_TIMEOUT   Stdout inactivity timeout in milliseconds (default: 1800000, 0 disables)
     CODEX_REQUIRE_APPROVAL     Require manual approval for file operations (default: false)
+    CLAUDE_REQUIRE_APPROVAL    Require approval for Claude backend (default: false)
     CODEX_DISABLE_SKIP_GIT_CHECK  Disable skip-git-repo-check flag (default: false)
     CODEAGENT_ASCII_MODE       Use ASCII symbols instead of Unicode (PASS/WARN/FAIL)
     CODEAGENT_LITE_MODE        Enable lite mode (true/false)
