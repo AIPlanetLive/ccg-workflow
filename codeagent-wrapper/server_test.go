@@ -1,7 +1,12 @@
 package main
 
 import (
+	"bufio"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -44,4 +49,66 @@ func TestBrowserAutoOpenEnabled(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHandleStreamReplaysAccumulatedContentForLateClient(t *testing.T) {
+	ws := NewWebServer("codex")
+	ws.StartSession("session-1", "codex", "task")
+	ws.SendContentWithType("session-1", "codex", "thinking\n", "reasoning")
+	ws.SendContentWithType("session-1", "codex", "answer\n", "message")
+	ws.EndSession("session-1", "codex")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/stream/session-1", nil)
+	rr := httptest.NewRecorder()
+
+	ws.handleStream(rr, req)
+
+	events := parseSSEContentEvents(t, rr.Body.String())
+	if len(events) != 2 {
+		t.Fatalf("got %d events, want 2; body:\n%s", len(events), rr.Body.String())
+	}
+
+	if events[0].Done {
+		t.Fatalf("first event Done=true, want accumulated content event first: %#v", events[0])
+	}
+	if events[0].SessionID != "session-1" {
+		t.Fatalf("first event SessionID=%q, want session-1", events[0].SessionID)
+	}
+	if events[0].Backend != "codex" {
+		t.Fatalf("first event Backend=%q, want codex", events[0].Backend)
+	}
+	if events[0].Content != "thinking\nanswer\n" {
+		t.Fatalf("first event Content=%q, want accumulated content", events[0].Content)
+	}
+	if events[0].ContentType != "message" {
+		t.Fatalf("first event ContentType=%q, want message", events[0].ContentType)
+	}
+
+	if !events[1].Done {
+		t.Fatalf("second event Done=false, want done event: %#v", events[1])
+	}
+}
+
+func parseSSEContentEvents(t *testing.T, body string) []ContentEvent {
+	t.Helper()
+
+	var events []ContentEvent
+	scanner := bufio.NewScanner(strings.NewReader(body))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+
+		var event ContentEvent
+		if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &event); err != nil {
+			t.Fatalf("unmarshal SSE event %q: %v", line, err)
+		}
+		events = append(events, event)
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("scan SSE body: %v", err)
+	}
+
+	return events
 }
