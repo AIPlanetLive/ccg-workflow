@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### ✨ 新功能
+
+- **源码编译安装 wrapper**：新增 `./install.sh`，一条命令编译 Go 版 `codeagent-wrapper` 并安装到 `~/.claude/bin/codeagent-wrapper`
+
+---
+
 ## [2.1.11] - 2026-03-31
 
 ### 🐛 修复

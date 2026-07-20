@@ -321,6 +321,14 @@ In `--json` mode, Codex does not automatically exit after output completion.
 
 We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 
+To build and install `codeagent-wrapper` locally from source:
+
+```bash
+./install.sh
+```
+
+This installs the binary to `~/.claude/bin/codeagent-wrapper`.
+
 Looking for a place to start? Check out issues labeled [`good first issue`](https://github.com/fengshao1227/ccg-workflow/labels/good%20first%20issue).
 
 ## Contributors

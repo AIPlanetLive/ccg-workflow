@@ -320,6 +320,14 @@ npm uninstall -g ccg-workflow  # npm 全局用户需额外执行
 
 欢迎贡献！请阅读 [CONTRIBUTING.md](./CONTRIBUTING.md) 了解开发指南。
 
+从源码本地编译并安装 `codeagent-wrapper`：
+
+```bash
+./install.sh
+```
+
+编译后的二进制会安装到 `~/.claude/bin/codeagent-wrapper`。
+
 想找一个入手点？查看标记为 [`good first issue`](https://github.com/fengshao1227/ccg-workflow/labels/good%20first%20issue) 的 Issue。
 
 ## 贡献者
