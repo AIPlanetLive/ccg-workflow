@@ -3667,9 +3667,9 @@ func TestRun_ExplicitStdinReadError(t *testing.T) {
 	if !strings.Contains(logOutput, "Failed to read stdin: broken stdin") {
 		t.Fatalf("log missing read error entry, got %q", logOutput)
 	}
-	// Log file is always removed after completion (new behavior)
-	if _, err := os.Stat(logPath); !os.IsNotExist(err) {
-		t.Fatalf("log file should be removed after completion")
+	// Failed runs keep their log for auditability (removed only on clean success).
+	if _, err := os.Stat(logPath); err != nil {
+		t.Fatalf("log file should be retained after a failed run: %v", err)
 	}
 }
 
@@ -3765,9 +3765,9 @@ func TestRun_PipedTaskReadError(t *testing.T) {
 	if !strings.Contains(logOutput, "Failed to read piped stdin: read stdin: pipe failure") {
 		t.Fatalf("log missing piped read error, got %q", logOutput)
 	}
-	// Log file is always removed after completion (new behavior)
-	if _, err := os.Stat(logPath); !os.IsNotExist(err) {
-		t.Fatalf("log file should be removed after completion")
+	// Failed runs keep their log for auditability (removed only on clean success).
+	if _, err := os.Stat(logPath); err != nil {
+		t.Fatalf("log file should be retained after a failed run: %v", err)
 	}
 }
 
@@ -3881,9 +3881,9 @@ printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"l
 	if exitCode != 130 {
 		t.Fatalf("exit code = %d, want 130", exitCode)
 	}
-	// Log file is always removed after completion (new behavior)
-	if _, err := os.Stat(logPath); !os.IsNotExist(err) {
-		t.Fatalf("log file should be removed after completion")
+	// Failed runs keep their log for auditability (removed only on clean success).
+	if _, err := os.Stat(logPath); err != nil {
+		t.Fatalf("log file should be retained after a failed run: %v", err)
 	}
 }
 

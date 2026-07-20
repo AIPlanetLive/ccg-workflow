@@ -84,6 +84,8 @@ func runStartupCleanup() {
 	if _, err := cleanupLogsFn(); err != nil {
 		logWarn(fmt.Sprintf("cleanupOldLogs error: %v", err))
 	}
+	// Prune old durable terminal records so failure records don't accumulate.
+	cleanupOldResults()
 }
 
 func runCleanupMode() int {
@@ -169,11 +171,16 @@ func run() (exitCode int) {
 					for _, entry := range errors {
 						fmt.Fprintln(os.Stderr, entry)
 					}
-					fmt.Fprintf(os.Stderr, "Log file: %s (deleted)\n", logger.Path())
+					fmt.Fprintf(os.Stderr, "Log file: %s (retained)\n", logger.Path())
 				}
 			}
-			if err := logger.RemoveLogFile(); err != nil && !os.IsNotExist(err) {
-				// Silently ignore removal errors
+			// Keep the log on failure/kill so an externally-terminated run
+			// (SIGTERM → exit 130) stays auditable and resumable; only remove it
+			// on clean success. Orphaned logs are reclaimed by cleanupOldLogs.
+			if exitCode == 0 {
+				if err := logger.RemoveLogFile(); err != nil && !os.IsNotExist(err) {
+					// Silently ignore removal errors
+				}
 			}
 		}
 	}()
@@ -486,6 +493,19 @@ func run() (exitCode int) {
 	}
 
 	result := runTaskFn(taskSpec, false, cfg.Timeout)
+
+	// On a non-zero exit (esp. an external SIGTERM → 130), persist a durable
+	// terminal record so the run leaves an auditable outcome and a resume handle
+	// instead of vanishing with its temp log. Successful runs already print
+	// SESSION_ID to stdout and delete their log, so they need no record. See H8.
+	// (Single-task path only; --parallel resume handles are out of scope here.)
+	if result.ExitCode != 0 {
+		if recPath, err := writeTerminalRecord(cfg, result); err != nil {
+			logWarn(fmt.Sprintf("failed to write terminal record: %v", err))
+		} else if recPath != "" {
+			fmt.Fprintf(os.Stderr, "  Result: %s\n", recPath)
+		}
+	}
 
 	if result.ExitCode != 0 {
 		return result.ExitCode

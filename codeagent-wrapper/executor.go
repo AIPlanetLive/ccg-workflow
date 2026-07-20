@@ -1376,6 +1376,12 @@ waitLoop:
 		}
 	}
 
+	// Preserve the resume handle (session_id) on every exit path — including
+	// cancellation, timeout, and backend error — not just clean success. Without
+	// this a run killed by an external signal returns exit 130 with an empty
+	// SessionID and cannot be resumed. See H8.
+	result.SessionID = parsed.threadID
+
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		if inactivityErr, ok := inactivityTimeoutFromContext(ctx); ok {
 			result.ExitCode = 124

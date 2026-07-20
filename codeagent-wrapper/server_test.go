@@ -17,7 +17,20 @@ func TestMain(m *testing.M) {
 	if _, ok := os.LookupEnv("CODEAGENT_OPEN_BROWSER"); !ok {
 		os.Setenv("CODEAGENT_OPEN_BROWSER", "false")
 	}
-	os.Exit(m.Run())
+	// Isolate durable terminal-record writes to a throwaway dir so the suite
+	// does not pollute the user's real ~/.local/state/codeagent-wrapper.
+	var cleanup func()
+	if _, ok := os.LookupEnv("CODEAGENT_STATE_DIR"); !ok {
+		if dir, err := os.MkdirTemp("", "codeagent-wrapper-test-state-"); err == nil {
+			os.Setenv("CODEAGENT_STATE_DIR", dir)
+			cleanup = func() { os.RemoveAll(dir) }
+		}
+	}
+	code := m.Run()
+	if cleanup != nil {
+		cleanup()
+	}
+	os.Exit(code)
 }
 
 func TestBrowserAutoOpenEnabled(t *testing.T) {
