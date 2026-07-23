@@ -811,9 +811,16 @@ func buildCodexArgs(cfg *Config, targetArg string) []string {
 
 	args := []string{"e"}
 
-	// Default: auto-approve all operations (consistent with Gemini's -y behavior)
-	// Users can disable this by setting CODEX_REQUIRE_APPROVAL=true
-	if !envFlagEnabled("CODEX_REQUIRE_APPROVAL") {
+	// Default: auto-approve all operations (consistent with Gemini's -y behavior).
+	// Users can disable this by setting CODEX_REQUIRE_APPROVAL=true.
+	// Least-privilege opt-in: CODEX_SANDBOX=read-only runs codex in a read-only
+	// sandbox (writes/kills denied) for read-only work such as reviewers that never
+	// need FS-write. codex exec is non-interactive, so a denied write fails the
+	// command rather than prompting — no hang. Takes precedence over the bypass.
+	switch {
+	case strings.EqualFold(strings.TrimSpace(os.Getenv("CODEX_SANDBOX")), "read-only"):
+		args = append(args, "--sandbox", "read-only")
+	case !envFlagEnabled("CODEX_REQUIRE_APPROVAL"):
 		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
 	}
 
