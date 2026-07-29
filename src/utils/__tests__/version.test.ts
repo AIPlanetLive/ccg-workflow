@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { compareVersions } from '../version'
 
@@ -59,5 +60,18 @@ describe('compareVersions', () => {
 
   it('handles large patch numbers', () => {
     expect(compareVersions('1.7.100', '1.7.99')).toBe(1)
+  })
+})
+
+describe('codeagent-wrapper version invariant', () => {
+  it('keeps the Go binary and TypeScript installer versions equal', () => {
+    const goSource = readFileSync(new URL('../../../codeagent-wrapper/main.go', import.meta.url), 'utf8')
+    const installerSource = readFileSync(new URL('../installer.ts', import.meta.url), 'utf8')
+    const goVersion = goSource.match(/\bversion\s*=\s*"([^"]+)"/)?.[1]
+    const installerVersion = installerSource.match(/\bEXPECTED_BINARY_VERSION\s*=\s*'([^']+)'/)?.[1]
+
+    expect(goVersion).toBeTruthy()
+    expect(installerVersion).toBeTruthy()
+    expect(goVersion).toBe(installerVersion)
   })
 })

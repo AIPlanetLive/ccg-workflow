@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🐛 修复
+
+- **Ubuntu backend discovery**：`codeagent-wrapper` 在 `PATH` 未命中 Codex、Claude 或 Gemini 时回退检查真实用户的 `~/.local/bin`，同时保持 `PATH` 优先、不可执行文件拒绝、backend cwd 与原有错误语义
+
 ### ✨ 新功能
 
 - **源码编译安装 wrapper**：新增 `./install.sh`，一条命令编译 Go 版 `codeagent-wrapper` 并安装到 `~/.claude/bin/codeagent-wrapper`

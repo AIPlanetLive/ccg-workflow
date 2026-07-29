@@ -63,6 +63,8 @@ npx ccg-workflow
 
 On first run, CCG prompts you to select a language (English / Chinese). This preference is saved for all future sessions.
 
+When Codex, Claude, or Gemini is not found on `PATH`, `codeagent-wrapper` also checks the matching executable in `~/.local/bin`. Existing `PATH` matches always take precedence; a missing or non-executable fallback keeps the normal command-not-found behavior. This supports non-interactive Ubuntu SSH sessions whose default `PATH` omits user-local CLI installs.
+
 ### Install jq
 
 ```bash

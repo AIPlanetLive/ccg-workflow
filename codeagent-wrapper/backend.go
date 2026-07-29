@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -14,6 +16,28 @@ type Backend interface {
 	Name() string
 	BuildArgs(cfg *Config, targetArg string) []string
 	Command() string
+}
+
+func resolveBackendCommand(command string) string {
+	if _, err := exec.LookPath(command); err == nil {
+		return command
+	} else if !errors.Is(err, exec.ErrNotFound) {
+		return command
+	}
+	if filepath.Base(command) != command {
+		return command
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return command
+	}
+	candidate := filepath.Join(home, ".local", "bin", command)
+	info, err := os.Stat(candidate)
+	if err != nil || info.IsDir() || info.Mode().Perm()&0o111 == 0 {
+		return command
+	}
+	return candidate
 }
 
 type CodexBackend struct{}

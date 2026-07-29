@@ -1022,7 +1022,8 @@ func runCodexTaskWithContext(parentCtx context.Context, taskSpec TaskSpec, backe
 		return fmt.Sprintf("%s; stderr: %s", msg, stderrBuf.String())
 	}
 
-	cmd := newCommandRunner(ctx, commandName, codexArgs...)
+	commandPath := resolveBackendCommand(commandName)
+	cmd := newCommandRunner(ctx, commandPath, codexArgs...)
 
 	// 统一处理所有后端的环境变量
 	// 修复 Windows Git Bash 后台进程 PATH 继承问题

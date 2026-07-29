@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	version                  = "5.9.0"
+	version                  = "5.9.1"
 	defaultWorkdir           = "."
 	defaultTimeout           = 21600 // seconds (6 hours)
 	defaultInactivityTimeout = 1800  // seconds (30 minutes)
