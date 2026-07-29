@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🐛 修复
 
-- **Ubuntu backend discovery**：`codeagent-wrapper` 在 `PATH` 未命中 Codex、Claude 或 Gemini 时回退检查真实用户的 `~/.local/bin`，同时保持 `PATH` 优先、不可执行文件拒绝、backend cwd 与原有错误语义
+- **Ubuntu backend discovery**：Ubuntu 非交互 SSH 会话的默认 `PATH` 不含用户本地 CLI 目录时，`codeagent-wrapper` 现在也能使用安装在 `~/.local/bin` 下的 Codex、Claude 或 Gemini
 
 ### ✨ 新功能
 

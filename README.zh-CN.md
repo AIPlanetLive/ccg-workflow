@@ -62,7 +62,11 @@ npx ccg-workflow
 
 首次运行会提示选择语言（简体中文 / English），选择后自动保存，后续无需再选。
 
-当 `PATH` 中找不到 Codex、Claude 或 Gemini 时，`codeagent-wrapper` 还会检查 `~/.local/bin` 中对应的可执行文件。已有的 `PATH` 命中始终优先；回退文件缺失或不可执行时仍保持正常的 command-not-found 行为。这样可支持默认 `PATH` 不含用户本地 CLI 安装目录的 Ubuntu 非交互 SSH 会话。
+对于默认 `PATH` 不含用户本地 CLI 安装目录的 Ubuntu 非交互 SSH 会话，请把所选 AI CLI 可执行文件放在 `~/.local/bin/codex`（或 `claude` / `gemini`）。`PATH` 未命中时，`codeagent-wrapper` 会自动发现该文件；已有的 `PATH` 命中仍始终优先。登录 Codex 后可用以下命令端到端验证 Codex 回退；它会发起一次 backend 请求，成功时输出一行 `ubuntu-ok`。
+
+```bash
+PATH=/usr/bin:/bin ~/.claude/bin/codeagent-wrapper --backend codex "Reply exactly: ubuntu-ok"
+```
 
 ### 安装 jq
 

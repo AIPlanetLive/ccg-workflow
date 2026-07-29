@@ -63,7 +63,11 @@ npx ccg-workflow
 
 On first run, CCG prompts you to select a language (English / Chinese). This preference is saved for all future sessions.
 
-When Codex, Claude, or Gemini is not found on `PATH`, `codeagent-wrapper` also checks the matching executable in `~/.local/bin`. Existing `PATH` matches always take precedence; a missing or non-executable fallback keeps the normal command-not-found behavior. This supports non-interactive Ubuntu SSH sessions whose default `PATH` omits user-local CLI installs.
+For non-interactive Ubuntu SSH sessions whose default `PATH` omits user-local CLI installs, place the selected AI CLI executable at `~/.local/bin/codex` (or `claude` / `gemini`). `codeagent-wrapper` discovers that executable automatically when `PATH` has no match; existing `PATH` matches still take precedence. To verify the Codex fallback end to end, run the following command after signing in to Codex; it makes one backend request and succeeds with an `ubuntu-ok` output line.
+
+```bash
+PATH=/usr/bin:/bin ~/.claude/bin/codeagent-wrapper --backend codex "Reply exactly: ubuntu-ok"
+```
 
 ### Install jq
 
