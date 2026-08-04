@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	version                  = "5.9.1"
+	version                  = "5.9.2"
 	defaultWorkdir           = "."
 	defaultTimeout           = 21600 // seconds (6 hours)
 	defaultInactivityTimeout = 1800  // seconds (30 minutes)
@@ -603,6 +603,18 @@ Environment Variables:
     CODEX_TIMEOUT              Timeout in milliseconds (default: 21600000)
     CODEX_INACTIVITY_TIMEOUT   Stdout inactivity timeout in milliseconds (default: 1800000, 0 disables)
     CODEX_REQUIRE_APPROVAL     Require manual approval for file operations (default: false)
+    CODEX_SANDBOX              Set to read-only (case-insensitive, surrounding
+                               whitespace ignored) to run codex in a read-only
+                               sandbox: writes and kills are denied, which suits
+                               reviewers and other read-only delegates. It takes
+                               precedence over the approval bypass below.
+                               UNSET IS NOT A SANDBOX, and neither is any other
+                               value — those are ignored, and what runs instead is
+                               decided by CODEX_REQUIRE_APPROVAL: left false (the
+                               default) codex is launched with approvals and
+                               sandboxing bypassed; set true, no sandbox flag is
+                               passed at all and codex falls back to its own
+                               configuration. Read-only work must opt in explicitly.
     CLAUDE_REQUIRE_APPROVAL    Require approval for Claude backend (default: false)
     CODEX_DISABLE_SKIP_GIT_CHECK  Disable skip-git-repo-check flag (default: false)
     CODEAGENT_ASCII_MODE       Use ASCII symbols instead of Unicode (PASS/WARN/FAIL)

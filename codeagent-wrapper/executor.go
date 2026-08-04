@@ -830,6 +830,20 @@ func buildCodexArgs(cfg *Config, targetArg string) []string {
 	}
 
 	if isResume {
+		// -C applies to resume exactly as it does to a new session: it is an
+		// option of `codex exec`, parsed before the `resume` subcommand, and it
+		// tells the agent which directory to use as its working root. Resuming
+		// without it is not neutral — the agent silently inherits the caller's
+		// cwd, so a caller that passes a workdir different from its own cwd (a
+		// git worktree, most commonly) gets an agent working on the wrong tree
+		// with no error. See resume_workdir_test.go.
+		//
+		// Guarded on non-empty because WorkDir is only defaulted to "." further
+		// up in runCodexTaskWithContext; callers reaching buildCodexArgs
+		// directly can still hand us "", and `-C ""` is worse than no -C.
+		if cfg.WorkDir != "" {
+			args = append(args, "-C", cfg.WorkDir)
+		}
 		return append(args,
 			"--json",
 			"resume",
@@ -1034,7 +1048,7 @@ func runCodexTaskWithContext(parentCtx context.Context, taskSpec TaskSpec, backe
 	cmd.SetEnv(env) // SetEnv 会自动合并 os.Environ() (executor.go:122-161)
 
 	// Set working directory for backends that rely on cwd.
-	// - Codex: uses -C for new mode and session-id for resume; skip cmd.Dir.
+	// - Codex: uses -C in both new and resume modes; skip cmd.Dir.
 	// - Gemini: uses cmd.Dir as cwd in both new and resume modes. New mode
 	//   also passes --include-directories in buildGeminiArgs().
 	// - Claude: resolves sessions by cwd-derived project plus id, so resume
@@ -1042,7 +1056,11 @@ func runCodexTaskWithContext(parentCtx context.Context, taskSpec TaskSpec, backe
 	if cfg.WorkDir != "" {
 		switch commandName {
 		case "codex":
-			// Codex uses -C (new) / session-id (resume); never needs cmd.Dir.
+			// Codex gets the workdir via -C in both modes; never needs cmd.Dir.
+			// This used to read "session-id carries it on resume", which was
+			// wrong: the session id selects the conversation, not the working
+			// root, and a resumed agent given neither -C nor cmd.Dir inherits
+			// the caller's cwd.
 		default:
 			cmd.SetDir(cfg.WorkDir)
 		}

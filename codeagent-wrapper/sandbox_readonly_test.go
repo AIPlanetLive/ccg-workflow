@@ -40,3 +40,43 @@ func TestBuildCodexArgs_ReadOnlySandbox(t *testing.T) {
 		}
 	})
 }
+
+// TestBuildCodexArgs_SandboxSelectionIsThreeWay pins what `--help` now promises
+// about CODEX_SANDBOX. The switch has two cases, so an unrecognised sandbox value
+// does not simply "fall back to the bypass" — with CODEX_REQUIRE_APPROVAL=true
+// neither case fires and codex is launched with no sandbox flag at all, deferring
+// to its own configuration. Documenting only the first two outcomes would tell a
+// caller they are bypassed when they are not, or sandboxed when they are not.
+func TestBuildCodexArgs_SandboxSelectionIsThreeWay(t *testing.T) {
+	const bypass = "--dangerously-bypass-approvals-and-sandbox"
+
+	cases := []struct {
+		name           string
+		sandbox        string
+		requireApprove string
+		wantSandbox    bool
+		wantBypass     bool
+	}{
+		{"read-only wins over the bypass", "read-only", "", true, false},
+		{"read-only wins even when approval is required", "read-only", "true", true, false},
+		{"unset falls through to the bypass", "", "", false, true},
+		{"unrecognised value falls through to the bypass", "workspace-write", "", false, true},
+		{"unrecognised value plus required approval yields neither flag", "workspace-write", "true", false, false},
+		{"unset plus required approval yields neither flag", "", "true", false, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("CODEX_SANDBOX", tc.sandbox)
+			t.Setenv("CODEX_REQUIRE_APPROVAL", tc.requireApprove)
+			got := buildCodexArgs(&Config{Mode: "new", WorkDir: "/tmp"}, "task")
+
+			if slices.Contains(got, "--sandbox") != tc.wantSandbox {
+				t.Fatalf("--sandbox presence = %v, want %v: %v", !tc.wantSandbox, tc.wantSandbox, got)
+			}
+			if slices.Contains(got, bypass) != tc.wantBypass {
+				t.Fatalf("bypass presence = %v, want %v: %v", !tc.wantBypass, tc.wantBypass, got)
+			}
+		})
+	}
+}
